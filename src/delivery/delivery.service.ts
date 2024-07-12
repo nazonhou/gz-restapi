@@ -1,15 +1,36 @@
+import { Database } from "../database";
 import { DocumentNotFoundError } from "../errors/document-not-found.error";
 import { InvalidDeliveryStatusError } from "../errors/invalid-delivery-status.error";
+import { Package } from "../package/package";
 import { CreateDeliveryDto } from "./create-delivery.dto";
 import { Delivery } from "./delivery";
 import { UpdateDeliveryLocationDto } from "./update-delivery-location.dto";
 import { UpdateDeliveryStatusDto } from "./update-delivery-status.dto";
 
+
 export class DeliveryService {
   constructor() {}
 
-  createDelivery(dto: CreateDeliveryDto) {
-    return (new Delivery(dto)).save();
+  async createDelivery(dto: CreateDeliveryDto) {
+    const session = await Database.mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      const delivery = await (new Delivery(dto)).save({ session });
+      await Package.findByIdAndUpdate(
+        delivery.package_id,
+        { active_delivery_id: delivery._id },
+        { session }
+      );
+      await session.commitTransaction();
+      session.endSession();
+      return delivery;
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      throw error;
+    }
+
   }
 
   getAllDeliveries() {
@@ -20,8 +41,43 @@ export class DeliveryService {
     return Delivery.findById(id);
   }
 
-  updateDelivery(id: string, dto: CreateDeliveryDto) {
-    return Delivery.findByIdAndUpdate(id, dto, { returnDocument: 'after' });
+  async updateDelivery(id: string, dto: CreateDeliveryDto) {
+    const deliveryBeforeUpdate = await Delivery.findById(id);
+
+    const session = await Database.mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      const deliverAfterUpdate = await Delivery.findByIdAndUpdate(
+        id,
+        dto,
+        { returnDocument: 'after', session }
+      );
+
+      if (deliveryBeforeUpdate?.package_id !== dto.package_id) {
+        await Package.updateOne(
+          { _id: deliveryBeforeUpdate?.package_id },
+          { $unset: { active_delivery_id: 1 } },
+          { session }
+        );
+
+        await Package.findByIdAndUpdate(
+          dto.package_id,
+          { active_delivery_id: id },
+          { session }
+        );
+      }
+
+      await session.commitTransaction();
+      session.endSession();
+
+      return deliverAfterUpdate;
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+
+      throw error;
+    }
   }
 
   deleteDelivery(id: string) {
@@ -71,5 +127,12 @@ export class DeliveryService {
     }
 
     return delivery.save();
+  }
+
+  getActiveDeliveriesByPackageId(package_id: string) {
+    return Delivery.find({
+      package_id,
+      status: { $nin: ['failed', 'delivered'] }
+    });
   }
 }

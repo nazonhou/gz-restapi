@@ -1,3 +1,4 @@
+import { SessionOption } from "mongoose";
 import { CreatePackageDto } from "./create-package.dto";
 import { Package } from "./package";
 import { UpdatePackageDto } from "./update-package.dto";
@@ -23,5 +24,13 @@ export class PackageService {
 
   deletePackage(id: string) {
     return Package.findOneAndDelete({ _id: id });
+  }
+
+  updatePackageActiveDelivery(id: string, active_delivery_id: string, options?: SessionOption) {
+    return Package.findByIdAndUpdate(
+      id,
+      { active_delivery_id },
+      { returnDocument: 'after', session: options?.session }
+    );
   }
 }

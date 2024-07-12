@@ -13,12 +13,22 @@ export class DeliveryController {
     private readonly packageService: PackageService
   ) {}
 
-  private deliveryValidationChain = () => [
+  private deliveryValidationChain = (operation: 'create' | 'update') => [
     body('package_id').notEmpty().isUUID().custom(
-      async value => {
+      async (value, { req }) => {
         const document = await this.packageService.getOnePackage(value);
         if (!document) {
           throw new Error("Is not a valid package id");
+        }
+
+        if (operation === 'update' && value === req.params?.id) {
+          return true;
+        }
+
+        const activeDeliveries = await this.deliveryService.getActiveDeliveriesByPackageId(value);
+
+        if (activeDeliveries.length) {
+          throw new Error("Package has active delivery");
         }
       }
     ),
@@ -37,7 +47,7 @@ export class DeliveryController {
   ];
 
   createDelivery = [
-    ...this.deliveryValidationChain(),
+    ...this.deliveryValidationChain('create'),
     async (request: Request, response: Response, next: NextFunction) => {
       const result = validationResult(request);
       if (!result.isEmpty()) {
@@ -80,7 +90,7 @@ export class DeliveryController {
 
   updateDelivery = [
     ...this.deliveryIdValidationChain(),
-    ...this.deliveryValidationChain(),
+    ...this.deliveryValidationChain('update'),
     async (request: Request, response: Response, next: NextFunction) => {
       const result = validationResult(request);
       if (!result.isEmpty()) {
