@@ -1,0 +1,10 @@
+services:
+  mongo:
+    image: mongo:7
+    restart: no
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME:-root}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_USERNAME:-root}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-gzbusinesscasedb}
+    ports:
+      - ${MONGO_PORT:-27017}:27017
